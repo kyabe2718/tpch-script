@@ -1,0 +1,4 @@
+build/
+tpc-h-tool/
+*.zip
+password.txt
