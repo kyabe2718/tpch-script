@@ -35,6 +35,7 @@ done
 
 for i in $(seq 1 22); do
     ./qgen -b${DBGEN_DIR}/dists.dss -s ${SCALE_FACTOR} ${i} | sed 's/\r//g' | sed -z 's/;\n\(LIMIT.*$\)/ \1;/g' > ${BUILD_DIR}/sql/${i}.sql
+    sed -z -i -e 's/create view \([^ ]*\)/drop view if exists \1;\n\ncreate view \1/g' ${BUILD_DIR}/sql/${i}.sql
     echo "generate ${BUILD_DIR}/sql/${i}.sql"
 done
 
