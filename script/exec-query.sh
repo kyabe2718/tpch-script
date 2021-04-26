@@ -11,7 +11,13 @@ if [[ -z "${DBNAME}" ]]; then
 fi
 
 for f in $@ ; do
+    cat $f
+    if [ -e $f.exp ]; then
+        echo "explain"
+        MYSQL_PWD=${PASSWORD} mysql -uroot -D ${DBNAME} -e "$(cat $f.exp)"
+    fi
     echo exec $f
-    time MYSQL_PWD=${PASSWORD} mysql -uroot -D ${DBNAME} < $f > /dev/null
+    # time MYSQL_PWD=${PASSWORD} mysql -uroot -D ${DBNAME} < $f
+    time MYSQL_PWD=${PASSWORD} mysql -uroot -D ${DBNAME} -e "$(cat $f)"
 done
 

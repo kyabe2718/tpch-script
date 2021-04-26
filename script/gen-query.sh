@@ -18,7 +18,7 @@ fi
 echo SCALE_FACTOR: $SCALE_FACTOR
 echo DBGEN_DIR: $DBGEN_DIR
 
-mkdir -p ${BUILD_DIR}/sql
+mkdir -p ${BUILD_DIR}/{sql,explain-sql}
 
 
 cd $DBGEN_DIR
@@ -36,6 +36,7 @@ done
 for i in $(seq 1 22); do
     ./qgen -b${DBGEN_DIR}/dists.dss -s ${SCALE_FACTOR} ${i} | sed 's/\r//g' | sed -z 's/;\n\(LIMIT.*$\)/ \1;/g' > ${BUILD_DIR}/sql/${i}.sql
     sed -z -i -e 's/create view \([^ ]*\)/drop view if exists \1;\n\ncreate view \1/g' ${BUILD_DIR}/sql/${i}.sql
+    cat ${BUILD_DIR}/sql/${i}.sql | sed 's/^select/explain select/g' > ${BUILD_DIR}/sql/${i}.sql.exp
     echo "generate ${BUILD_DIR}/sql/${i}.sql"
 done
 

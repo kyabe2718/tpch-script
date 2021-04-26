@@ -7,7 +7,7 @@
 ## create tables and generate queries
 
 ```
-$ make setup-all TPCH_ZIP=/path/to/tpch-zip/ PASSWORD="password for root"
+$ make setup-all SCALE_FACTOR=$(SF) TPCH_ZIP=/path/to/tpch-zip/ PASSWORD="password for root"
 ```
 
 ## exec queries
