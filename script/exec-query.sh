@@ -16,7 +16,7 @@ for f in $@ ; do
         echo "explain"
         MYSQL_PWD=${PASSWORD} mysql -uroot -D ${DBNAME} -e "$(cat $f.exp)"
     fi
-    echo exec $f
+    echo exec $f on ${DBNAME}
     # time MYSQL_PWD=${PASSWORD} mysql -uroot -D ${DBNAME} < $f
     time MYSQL_PWD=${PASSWORD} mysql -uroot -D ${DBNAME} -e "$(cat $f)"
 done

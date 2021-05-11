@@ -7,8 +7,8 @@ TPCH_TOOL_DIR:=$(MAKEFILE_DIR)tpc-h-tool
 
 PASSWORD:=$(shell cat $(MAKEFILE_DIR)password.txt)
 
-SCALE_FACTOR:=1
-DBNAME:=sf$(SCALE_FACTOR)
+SF:=1
+DBNAME:=sf$(shell echo $(SF) | sed 's/\./_/g')
 DBCONFIG:=GEN_QUERY_PLAN=\\"EXPLAIN\\"\
     -DSTART_TRAN=\\"START\\ TRANSACTION\\"\
     -DEND_TRAN=\\"COMMIT\\"\
@@ -49,8 +49,7 @@ dbgen-tools: $(DBGEN_DIR)/Makefile
 gen-tbl: dbgen-tools
 	@echo "Generating tables..."
 	mkdir -p $(BUILD_DIR)/tbl
-	$(BUILD_DIR)/dbgen -b $(DBGEN_DIR)/dists.dss -vf -s $(SCALE_FACTOR)
-	mv *.tbl $(BUILD_DIR)/tbl
+	cd $(BUILD_DIR)/tbl && $(BUILD_DIR)/dbgen -b $(DBGEN_DIR)/dists.dss -vf -s $(SF)
 
 .PHONY: setup-mysql
 setup-mysql: gen-tbl
@@ -59,7 +58,7 @@ setup-mysql: gen-tbl
 .PHONY: gen-query
 gen-query: dbgen-tools
 	@echo "Generating queries..."
-	BUILD_DIR=$(BUILD_DIR) SCALE_FACTOR=$(SCALE_FACTOR) DBGEN_DIR=$(DBGEN_DIR) $(MAKEFILE_DIR)/script/gen-query.sh
+	BUILD_DIR=$(BUILD_DIR) SCALE_FACTOR=$(SF) DBGEN_DIR=$(DBGEN_DIR) $(MAKEFILE_DIR)/script/gen-query.sh
 
 .PHONY: setup-all
 setup-all: setup-mysql gen-query
@@ -68,12 +67,24 @@ setup-all: setup-mysql gen-query
 login-mysql:
 	mysql -u root -p${PASSWORD}
 
-TARGET=
+Q=1
 .PHONY: test
 test:
+	DBNAME=$(DBNAME) PASSWORD=${PASSWORD} $(MAKEFILE_DIR)/script/exec-query.sh $(BUILD_DIR)/sql/$(Q).sql
+
+.PHONY: exec
+exec:
 	DBNAME=$(DBNAME) PASSWORD=${PASSWORD} $(MAKEFILE_DIR)/script/exec-query.sh $(TARGET)
 
 .PHONY: all-test
 all-test:
 	DBNAME=$(DBNAME) PASSWORD=${PASSWORD} $(MAKEFILE_DIR)/script/exec-query.sh $(shell find $(BUILD_DIR)/sql -name *.sql)
+
+.PHONY: db-size
+db-size:
+	MYSQL_PWD=${PASSWORD} mysql -u root -e "select table_schema, sum(data_length) / 1024 / 1024 as MB from information_schema.tables group by table_schema order by sum(data_length + index_length) desc;"
+
+.PHONY: tbl-size
+tbl-size:
+	MYSQL_PWD=${PASSWORD} mysql -u root -D$(DBNAME) -e "select table_name, engine, table_rows as tbl_rows, floor((data_length+index_length)/1024/1024) as AllMB, floor((data_length)/1024/1024) as DataMB, floor((index_length)/1024/1024) as IdxMB from information_schema.tables where table_schema=database() order by (data_length+index_length) desc;"
 

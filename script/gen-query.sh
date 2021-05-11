@@ -34,7 +34,7 @@ for f in $(find ${DBGEN_DIR}/queries -name *.sql); do
 done
 
 for i in $(seq 1 22); do
-    ./qgen -b${DBGEN_DIR}/dists.dss -s ${SCALE_FACTOR} ${i} | sed 's/\r//g' | sed -z 's/;\n\(LIMIT.*$\)/ \1;/g' > ${BUILD_DIR}/sql/${i}.sql
+    ./qgen -b${DBGEN_DIR}/dists.dss -s ${SCALE_FACTOR} -d ${i} | sed 's/\r//g' | sed -z 's/;\n\(LIMIT.*$\)/ \1;/g' > ${BUILD_DIR}/sql/${i}.sql
     sed -z -i -e 's/create view \([^ ]*\)/drop view if exists \1;\n\ncreate view \1/g' ${BUILD_DIR}/sql/${i}.sql
     cat ${BUILD_DIR}/sql/${i}.sql | sed 's/^select/explain select/g' > ${BUILD_DIR}/sql/${i}.sql.exp
     echo "generate ${BUILD_DIR}/sql/${i}.sql"
