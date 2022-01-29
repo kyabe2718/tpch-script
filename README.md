@@ -1,17 +1,32 @@
 # TPCH Script
+* TPC-Hベンチマークを実行するためのスクリプト群
+    * PostgresとMySQLで使える
 
 ## Requirements
+* TPC-Hのベンチマークをダウンロードし、external/に展開しておく
+    * http://www.tpc.org/tpch/
 
-* MySQL (>= 8.0?)
+* Postgres/MySQLのインストール
+     * PostgresはpostgresユーザーでMySQLはrootユーザーがデフォルト
 
-## create tables and generate queries
-
+## Setup
 ```
-$ make setup-all SCALE_FACTOR=$(SF) TPCH_ZIP=/path/to/tpch-zip/ PASSWORD="password for root"
+$ make setup-all DBTYPE=${DBTYPE}
 ```
+* `${DBTYPE}`にはpostgresかmysqlを入れる
+    * 何も設定しなければpostgres
 
-## exec queries
+## Run
+``
+$ make run Q=${query number} DBTYPE=${DBTYPE}
+```
+* query numberは1~22の整数
 
+``
+$ make exp Q=${query number} DBTYPE=${DBTYPE}
 ```
-$ make all-test
-```
+* 実行計画も表示できる
+
+## Note
+* MySQLのInnoDBのバッファサイズなどをsrc/mysql.mk内で設定している
+    * 値は適当
