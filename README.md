@@ -17,7 +17,7 @@ $ make setup-all DBTYPE=${DBTYPE}
     * 何も設定しなければpostgres
 
 ## Run
-``
+```
 $ make run Q=${query number} DBTYPE=${DBTYPE}
 ```
 * query numberは1~22の整数
