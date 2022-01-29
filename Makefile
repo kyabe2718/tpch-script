@@ -1,90 +1,91 @@
+# -----------------------------------------------------------------------------------------------------
+#    Config
+# -----------------------------------------------------------------------------------------------------
+
+DBNAME:=tpcd
+SF:=1
+DBTYPE:=postgres
+# DBTYPE:=mysql
+TPCH_ZIP:=tpc-h-tool.zip
+
+# -----------------------------------------------------------------------------------------------------
+#    Preliminaries
+# -----------------------------------------------------------------------------------------------------
 
 MAKEFILE_PATH:=$(realpath $(firstword $(MAKEFILE_LIST)))
 MAKEFILE_DIR:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+TPCH_TOOL_DIR=$(realpath $(shell find $(MAKEFILE_DIR)/external -type d -name "TPC-H_Tool*"))
+DBGEN_DIR:=$(realpath $(shell find $(MAKEFILE_DIR)/external -type d -name dbgen))
+BUILD_DIR:=$(MAKEFILE_DIR)build-$(DBTYPE)
 
-TPCH_ZIP:=tpc-h-tool.zip
-TPCH_TOOL_DIR:=$(MAKEFILE_DIR)tpc-h-tool
+ifeq "$(DBTYPE)" "postgres"
+include $(MAKEFILE_DIR)/src/postgres.mk
+else ifeq "$(DBTYPE)" "mysql"
+include $(MAKEFILE_DIR)/src/mysql.mk
+endif
 
-PASSWORD:=$(shell cat $(MAKEFILE_DIR)password.txt)
-
-SF:=1
-DBNAME:=sf$(shell echo $(SF) | sed 's/\./_/g')
-DBCONFIG:=GEN_QUERY_PLAN=\\"EXPLAIN\\"\
-    -DSTART_TRAN=\\"START\\ TRANSACTION\\"\
-    -DEND_TRAN=\\"COMMIT\\"\
-    -DSET_OUTPUT=\\"INTO\\ OUTFILE\\"\
-    -DSET_ROWCOUNT=\\"LIMIT\\ %d\\\\n\\"\
-    -DSET_DBASE=\\"USE\\ %s\\;\\\\n\\"
-BUILD_DIR:=$(MAKEFILE_DIR)/build/$(DBNAME)
-
-.PHONY: extract-zip
-extract-zip:
-	unzip -uqq $(TPCH_ZIP) -d $(TPCH_TOOL_DIR)
-	$(eval DBGEN_DIR:=$(shell find $(TPCH_TOOL_DIR) -type d -name dbgen))
-	@echo "DBGEN_DIR:=$(DBGEN_DIR)"
-
-# dbgen/makefile.suiteを元にMakefileを作製
-$(DBGEN_DIR)/Makefile: $(MAKEFILE_PATH) extract-zip
-	cp -f $(DBGEN_DIR)/makefile.suite $(DBGEN_DIR)/Makefile
-	sed -i 's/^.*CC\s*=.*/CC =gcc/g' $(DBGEN_DIR)/Makefile
-	sed -i 's/DATABASE\s*=.*/DATABASE =$(DBCONFIG)/g' $(DBGEN_DIR)/Makefile
-	sed -i 's/MACHINE\s*=.*/MACHINE =LINUX/g' $(DBGEN_DIR)/Makefile
-	sed -i 's/WORKLOAD\s*=.*/WORKLOAD =TPCH/g' $(DBGEN_DIR)/Makefile
-	#diff $(DBGEN_DIR)/makefile.suite $(DBGEN_DIR)/Makefile || true
-
-# 作製したMakefileによりdbgenとqgenをmake
-.PHONY: dbgen-tools
-dbgen-tools: $(DBGEN_DIR)/Makefile
-	#$(MAKE) -C $(DBGEN_DIR) clean
-	$(MAKE) -C $(DBGEN_DIR)
+$(BUILD_DIR)/tools.makefile: $(MAKEFILE_PATH)
 	mkdir -p $(BUILD_DIR)
+	cp -f $(DBGEN_DIR)/makefile.suite $(BUILD_DIR)/tools.makefile
+	sed -i 's/^.*CC\s*=.*/CC =gcc/g' $(BUILD_DIR)/tools.makefile              # CC = gcc
+	sed -i 's/DATABASE\s*=.*/DATABASE =$(DBCONFIG)/g' $(BUILD_DIR)/tools.makefile  # CUSTOM DATABASE CONFIG
+	sed -i 's/MACHINE\s*=.*/MACHINE =LINUX/g' $(BUILD_DIR)/tools.makefile     # MACHINE = LINUX
+	sed -i 's/WORKLOAD\s*=.*/WORKLOAD =TPCH/g' $(BUILD_DIR)/tools.makefile    # WORKLOAD = TPCH
+	diff $(DBGEN_DIR)/makefile.suite $(BUILD_DIR)/tools.makefile || true      # print diff
+
+.PHONY: tools
+tools: $(BUILD_DIR)/tools.makefile
+	$(MAKE) -C $(DBGEN_DIR) -f $(BUILD_DIR)/tools.makefile clean
+	$(MAKE) -C $(DBGEN_DIR) -f $(BUILD_DIR)/tools.makefile
 	cp $(DBGEN_DIR)/dbgen $(BUILD_DIR)
 	cp $(DBGEN_DIR)/qgen $(BUILD_DIR)
 	cat $(DBGEN_DIR)/dss.ddl | tr A-Z a-z > $(BUILD_DIR)/dss.ddl
-	#sed -e 's/TPCD\.\([A-Z]*\)/$(DBNAME).\L\1/g' $(DBGEN_DIR)/dss.ri > $(BUILD_DIR)/dss.ri
-	sed -e 's/TPCD\.\([A-Z]*\)/$(DBNAME).\L\1/g' $(MAKEFILE_DIR)/script/dss.ri > $(BUILD_DIR)/dss.ri
-	sed -i 's/TPCD/$(DBNAME)/g' $(BUILD_DIR)/dss.ri
+	cp $(MAKEFILE_DIR)/src/dss.ri  $(BUILD_DIR)
+	sed -i 's/CONNECT TO.*//g' $(BUILD_DIR)/dss.ri
+	sed -i 's/COMMIT WORK.*//g' $(BUILD_DIR)/dss.ri
+	sed -i -e 's/TPCD\.\([A-Z]*\)/\L\1/g' $(BUILD_DIR)/dss.ri
+	sed -i 's/ADD FOREIGN KEY [_a-zA-Z0-9]* (\([,_a-zA-Z0-9]*\))/ADD FOREIGN KEY (\1)/g' $(BUILD_DIR)/dss.ri
 
 .PHONY: gen-tbl
-gen-tbl: dbgen-tools
+gen-tbl: tools
 	@echo "Generating tables..."
 	mkdir -p $(BUILD_DIR)/tbl
 	cd $(BUILD_DIR)/tbl && $(BUILD_DIR)/dbgen -b $(DBGEN_DIR)/dists.dss -vf -s $(SF)
 
-.PHONY: setup-mysql
-setup-mysql: gen-tbl
-	BUILD_DIR=$(BUILD_DIR) PASSWORD=$(PASSWORD) DBNAME=$(DBNAME) $(MAKEFILE_DIR)/script/setup-mysql.sh
+define GEN_QUERY
+	@echo generate $(2).sql from $(1)
+	cp $(1) $(BUILD_DIR)/tmp/$(2).sql
+	sed -i 's/day ([0-9]*)/day/g' $(BUILD_DIR)/tmp/$(2).sql
+	sed -i 's/:n -1//g' $(BUILD_DIR)/tmp/$(2).sql
+	cd $(DBGEN_DIR) && DSS_QUERY=$(BUILD_DIR)/tmp ./qgen -b $(DBGEN_DIR)/dists.dss -s $(SF) -d $(2) > $(BUILD_DIR)/sql/$(2).sql
+	sed -i 's/\r//g' $(BUILD_DIR)/sql/$(2).sql
+	sed -i -z 's/;\n\(LIMIT.*$$\)/\n\1;/g' $(BUILD_DIR)/sql/$(2).sql
+
+endef
 
 .PHONY: gen-query
-gen-query: dbgen-tools
-	@echo "Generating queries..."
-	BUILD_DIR=$(BUILD_DIR) SCALE_FACTOR=$(SF) DBGEN_DIR=$(DBGEN_DIR) $(MAKEFILE_DIR)/script/gen-query.sh
+gen-query: tools $(wildcard $(DBGEN_DIR)/queries/*.sql)
+	mkdir -p $(BUILD_DIR)/tmp
+	mkdir -p $(BUILD_DIR)/sql
+	$(foreach q, $(wildcard $(DBGEN_DIR)/queries/*.sql), $(call GEN_QUERY,$(q),$(basename $(notdir $(q)))))
+	rm -rf $(BUILD_DIR)/tmp
+
+.PHONY: load-data
+load-data: gen-tbl $(wildcard $(BUILD_DIR)/tbl/*.tbl)
+	$(MAKE) setup-db
+	$(call EXEC_CMD_NO_DB,"drop database if exists $(DBNAME);")
+	$(call EXEC_CMD_NO_DB,"create database $(DBNAME);")
+	$(call EXEC_FILE,$(BUILD_DIR)/dss.ddl)
+	$(foreach tblfile, $(wildcard $(BUILD_DIR)/tbl/*.tbl), $(call LOAD_DATA,$(tblfile),$(basename $(notdir $(tblfile)))))
+	$(call EXEC_FILE,$(BUILD_DIR)/dss.ri)
 
 .PHONY: setup-all
-setup-all: setup-mysql gen-query
-
-.PHONY: login-mysql
-login-mysql:
-	mysql -u root -p${PASSWORD}
+setup-all: gen-query load-data
 
 Q=1
-.PHONY: test
-test:
-	DBNAME=$(DBNAME) PASSWORD=${PASSWORD} $(MAKEFILE_DIR)/script/exec-query.sh $(BUILD_DIR)/sql/$(Q).sql
+run:
+	$(call EXEC_FILE,$(BUILD_DIR)/sql/$(Q).sql)
 
-.PHONY: exec
-exec:
-	DBNAME=$(DBNAME) PASSWORD=${PASSWORD} $(MAKEFILE_DIR)/script/exec-query.sh $(TARGET)
-
-.PHONY: all-test
-all-test:
-	DBNAME=$(DBNAME) PASSWORD=${PASSWORD} $(MAKEFILE_DIR)/script/exec-query.sh $(shell find $(BUILD_DIR)/sql -name *.sql)
-
-.PHONY: db-size
-db-size:
-	MYSQL_PWD=${PASSWORD} mysql -u root -e "select table_schema, sum(data_length) / 1024 / 1024 as MB from information_schema.tables group by table_schema order by sum(data_length + index_length) desc;"
-
-.PHONY: tbl-size
-tbl-size:
-	MYSQL_PWD=${PASSWORD} mysql -u root -D$(DBNAME) -e "select table_name, engine, table_rows as tbl_rows, floor((data_length+index_length)/1024/1024) as AllMB, floor((data_length)/1024/1024) as DataMB, floor((index_length)/1024/1024) as IdxMB from information_schema.tables where table_schema=database() order by (data_length+index_length) desc;"
+exp:
+	$(call EXEC_FILE,$(BUILD_DIR)/sql/$(Q).sql.exp)
 

@@ -1,4 +1,4 @@
-build/
+build*/
+external/*
 tpc-h-tool/
 *.zip
-password.txt
