@@ -15,6 +15,7 @@ $ make setup-all DBTYPE=${DBTYPE}
 ```
 * `${DBTYPE}`にはpostgresかmysqlを入れる
     * 何も設定しなければpostgres
+* ユーザーがrootならsudoが要るかも
 
 ## Run
 ```
