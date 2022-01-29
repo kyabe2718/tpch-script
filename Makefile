@@ -6,7 +6,6 @@ DBNAME:=tpcd
 SF:=1
 DBTYPE:=postgres
 # DBTYPE:=mysql
-TPCH_ZIP:=tpc-h-tool.zip
 
 # -----------------------------------------------------------------------------------------------------
 #    Preliminaries
@@ -14,7 +13,6 @@ TPCH_ZIP:=tpc-h-tool.zip
 
 MAKEFILE_PATH:=$(realpath $(firstword $(MAKEFILE_LIST)))
 MAKEFILE_DIR:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
-TPCH_TOOL_DIR=$(realpath $(shell find $(MAKEFILE_DIR)/external -type d -name "TPC-H_Tool*"))
 DBGEN_DIR:=$(realpath $(shell find $(MAKEFILE_DIR)/external -type d -name dbgen))
 BUILD_DIR:=$(MAKEFILE_DIR)build-$(DBTYPE)
 
