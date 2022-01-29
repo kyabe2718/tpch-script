@@ -23,7 +23,7 @@ $ make run Q=${query number} DBTYPE=${DBTYPE}
 ```
 * query numberは1~22の整数
 
-``
+```
 $ make exp Q=${query number} DBTYPE=${DBTYPE}
 ```
 * 実行計画も表示できる
