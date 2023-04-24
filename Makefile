@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------------------------------
 
 DBNAME:=tpcd
-SF:=1
+SF:=10
 DBTYPE:=postgres
 # DBTYPE:=mysql
 
@@ -52,12 +52,13 @@ gen-tbl: tools
 
 define GEN_QUERY
 	@echo generate $(2).sql from $(1)
-	cp $(1) $(BUILD_DIR)/tmp/$(2).sql
-	sed -i 's/day ([0-9]*)/day/g' $(BUILD_DIR)/tmp/$(2).sql
-	sed -i 's/:n -1//g' $(BUILD_DIR)/tmp/$(2).sql
+	cp        $(1)                         $(BUILD_DIR)/tmp/$(2).sql
+	sed -i    's/day ([0-9]*)/day/g'       $(BUILD_DIR)/tmp/$(2).sql
+	sed -i    's/:n -1//g'                 $(BUILD_DIR)/tmp/$(2).sql
 	cd $(DBGEN_DIR) && DSS_QUERY=$(BUILD_DIR)/tmp ./qgen -b $(DBGEN_DIR)/dists.dss -s $(SF) -d $(2) > $(BUILD_DIR)/sql/$(2).sql
-	sed -i 's/\r//g' $(BUILD_DIR)/sql/$(2).sql
+	sed -i    's/\r//g'                    $(BUILD_DIR)/sql/$(2).sql
 	sed -i -z 's/;\n\(LIMIT.*$$\)/\n\1;/g' $(BUILD_DIR)/sql/$(2).sql
+	sed       's/^select/explain (format json, analyze) select/i' $(BUILD_DIR)/sql/$(2).sql > $(BUILD_DIR)/sql/$(2).sql.exp
 
 endef
 
@@ -84,6 +85,11 @@ Q=1
 run:
 	$(call EXEC_FILE,$(BUILD_DIR)/sql/$(Q).sql)
 
+.PHONY:exp
 exp:
 	$(call EXEC_FILE,$(BUILD_DIR)/sql/$(Q).sql.exp)
 
+COMMA := ,
+.PHONY: show
+show:
+	$(call EXEC_CMD,"SELECT tablename $(COMMA) indexname FROM pg_indexes WHERE tablename NOT LIKE 'pg_%';")

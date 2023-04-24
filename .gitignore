@@ -2,3 +2,4 @@ build*/
 external/*
 tpc-h-tool/
 *.zip
+output/
