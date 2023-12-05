@@ -2,8 +2,8 @@
 #    Config
 # -----------------------------------------------------------------------------------------------------
 
-DBNAME:=tpcd
 SF:=10
+DBNAME:=tpch_sf$(SF)
 DBTYPE:=postgres
 # DBTYPE:=mysql
 
@@ -14,7 +14,7 @@ DBTYPE:=postgres
 MAKEFILE_PATH:=$(realpath $(firstword $(MAKEFILE_LIST)))
 MAKEFILE_DIR:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 DBGEN_DIR:=$(realpath $(shell find $(MAKEFILE_DIR)/external -type d -name dbgen))
-BUILD_DIR:=$(MAKEFILE_DIR)build-$(DBTYPE)
+BUILD_DIR:=$(MAKEFILE_DIR)build-$(DBNAME)
 
 ifeq "$(DBTYPE)" "postgres"
 include $(MAKEFILE_DIR)/src/postgres.mk
@@ -56,9 +56,12 @@ define GEN_QUERY
 	sed -i    's/day ([0-9]*)/day/g'       $(BUILD_DIR)/tmp/$(2).sql
 	sed -i    's/:n -1//g'                 $(BUILD_DIR)/tmp/$(2).sql
 	cd $(DBGEN_DIR) && DSS_QUERY=$(BUILD_DIR)/tmp ./qgen -b $(DBGEN_DIR)/dists.dss -s $(SF) -d $(2) > $(BUILD_DIR)/sql/$(2).sql
+	sed -i -e '1i \timing'                 $(BUILD_DIR)/sql/$(2).sql
 	sed -i    's/\r//g'                    $(BUILD_DIR)/sql/$(2).sql
 	sed -i -z 's/;\n\(LIMIT.*$$\)/\n\1;/g' $(BUILD_DIR)/sql/$(2).sql
-	sed       's/^select/explain (format json, analyze) select/i' $(BUILD_DIR)/sql/$(2).sql > $(BUILD_DIR)/sql/$(2).sql.exp
+	sed       's/^select/explain select/i' $(BUILD_DIR)/sql/$(2).sql > $(BUILD_DIR)/sql/$(2).sql.exp
+	sed       's/^select/explain (analyze) select/i' $(BUILD_DIR)/sql/$(2).sql > $(BUILD_DIR)/sql/$(2).sql.analyze
+	sed       's/^select/explain (format json, analyze) select/i' $(BUILD_DIR)/sql/$(2).sql > $(BUILD_DIR)/sql/$(2).sql.analyze_json
 
 endef
 
@@ -89,7 +92,29 @@ run:
 exp:
 	$(call EXEC_FILE,$(BUILD_DIR)/sql/$(Q).sql.exp)
 
+.PHONY:analyze
+analyze:
+	$(call EXEC_FILE,$(BUILD_DIR)/sql/$(Q).sql.analyze)
+
 COMMA := ,
 .PHONY: show
 show:
 	$(call EXEC_CMD,"SELECT tablename $(COMMA) indexname FROM pg_indexes WHERE tablename NOT LIKE 'pg_%';")
+	$(call EXEC_FILE,src/pg_analyze.sql)
+
+
+TMP_FILE:=/mnt/disk/tmpfile # to flush filesystem buffer
+TMP_FILE_SIZE:=5000 #KB
+
+$(TMP_FILE):
+	dd if=/dev/random of=$(TMP_FILE) bs=1024k count=$(TMP_FILE_SIZE)
+
+.PHONY: clear_cache
+clear_cache:$(TMP_FILE)
+	# sudo -u postgres /opt/postgres/bin/pg_ctl -D /mnt/disk/postgres/data -l /mnt/disk/postgres/logfile stop
+	sync; echo 3 > sudo /proc/sys/vm/drop_caches
+	sudo hdparm -f /dev/sda
+	sudo hdparm -f /dev/sdb
+	time wc -l $(TMP_FILE)
+	sudo -u postgres /opt/postgres/bin/pg_ctl -D /mnt/disk/postgres/data -l /mnt/disk/postgres/logfile restart
+
